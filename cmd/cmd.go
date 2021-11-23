@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"log"
 	"os"
 	"strings"
@@ -112,7 +113,7 @@ var globalFlags = []cli.Flag{
 	},
 	cli.StringFlag{
 		Name:   "provider",
-		Usage:  "s3|s3-ec2role|gdrive|local",
+		Usage:  "s3|gdrive|local",
 		Value:  "",
 		EnvVar: "PROVIDER",
 	},
@@ -123,22 +124,25 @@ var globalFlags = []cli.Flag{
 		EnvVar: "S3_ENDPOINT",
 	},
 	cli.StringFlag{
+		Name:  "s3-credentials-provider",
+		Usage: "",
+		Value: "StaticProvider",
+	},
+	cli.StringFlag{
 		Name:   "s3-region",
 		Usage:  "",
 		Value:  "eu-west-1",
 		EnvVar: "S3_REGION",
 	},
 	cli.StringFlag{
-		Name:   "aws-access-key",
-		Usage:  "",
-		Value:  "",
-		EnvVar: "AWS_ACCESS_KEY",
+		Name:  "aws-access-key",
+		Usage: "",
+		Value: "",
 	},
 	cli.StringFlag{
-		Name:   "aws-secret-key",
-		Usage:  "",
-		Value:  "",
-		EnvVar: "AWS_SECRET_KEY",
+		Name:  "aws-secret-key",
+		Usage: "",
+		Value: "",
 	},
 	cli.StringFlag{
 		Name:   "bucket",
@@ -434,25 +438,32 @@ func New() *Cmd {
 
 		switch provider := c.String("provider"); provider {
 		case "s3":
-			if accessKey := c.String("aws-access-key"); accessKey == "" {
-				panic("access-key not set.")
-			} else if secretKey := c.String("aws-secret-key"); secretKey == "" {
-				panic("secret-key not set.")
-			} else if bucket := c.String("bucket"); bucket == "" {
+			var err error
+			var sess *session.Session
+			bucket := c.String("bucket")
+			if bucket == "" {
 				panic("bucket not set.")
-			} else if storage, err := server.NewS3Storage(accessKey, secretKey, bucket, purgeDays, c.String("s3-region"), c.String("s3-endpoint"), c.Bool("s3-no-multipart"), c.Bool("s3-path-style"), logger); err != nil {
-				panic(err)
-			} else {
-				options = append(options, server.UseStorage(storage))
 			}
-		case "s3-ec2role": // using AWS IAM Role and EC2 Profile
-			if bucket := c.String("bucket"); bucket == "" {
-				panic("bucket not set.")
-			} else if storage, err := server.NewS3Storage("", "", bucket, purgeDays, c.String("s3-region"), c.String("s3-endpoint"), c.Bool("s3-no-multipart"), c.Bool("s3-path-style"), logger); err != nil {
-				panic(err)
+			if c.String("s3-credentials-provider") == "StaticProvider" {
+				accessKey := c.String("aws-access-key")
+				secretKey := c.String("aws-secret-key")
+				sess = server.GetAwsSession(accessKey, secretKey, c.String("s3-region"), c.String("s3-endpoint"), c.Bool("s3-path-style"))
+				_, err := sess.Config.Credentials.Get()
+				if err != nil {
+					panic(err)
+				}
 			} else {
-				options = append(options, server.UseStorage(storage))
+				sess, err = server.GetSharedConfigSession(c.String("s3-region"), c.String("s3-endpoint"), c.Bool("s3-path-style"))
+				if err != nil {
+					panic(err)
+				}
 			}
+			storage, err := server.NewS3Storage(sess, bucket, purgeDays, c.Bool("s3-no-multipart"), logger)
+			if err != nil {
+				panic(err)
+			}
+			options = append(options, server.UseStorage(storage))
+
 		case "gdrive":
 			chunkSize := c.Int("gdrive-chunk-size")
 

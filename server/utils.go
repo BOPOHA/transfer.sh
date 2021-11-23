@@ -28,40 +28,37 @@ package server
 
 import (
 	"fmt"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	"math"
 	"net/http"
 	"net/mail"
 	"strconv"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/golang/gddo/httputil/header"
 )
 
-func getAwsSession(accessKey, secretKey, region, endpoint string, forcePathStyle bool) *session.Session {
-
-	if accessKey+secretKey == "" {
-		return session.Must(session.NewSessionWithOptions(session.Options{
-			SharedConfigState: session.SharedConfigEnable,
-			Config: aws.Config{
-				// this config will be used only for backward compatibility to work with S3 client and s3manager;
-				// a not for getting session credentials;
-				// will be better to refactor NewS3Storage() function with s3.New(sess, &aws.Config{...})
-				Region:           aws.String(region),
-				Endpoint:         aws.String(endpoint),
-				S3ForcePathStyle: aws.Bool(forcePathStyle),
-			},
-		}))
-	}
-
+func GetAwsSession(accessKey, secretKey, region, endpoint string, forcePathStyle bool) *session.Session {
 	return session.Must(session.NewSession(&aws.Config{
 		Region:           aws.String(region),
 		Endpoint:         aws.String(endpoint),
 		Credentials:      credentials.NewStaticCredentials(accessKey, secretKey, ""),
 		S3ForcePathStyle: aws.Bool(forcePathStyle),
 	}))
+}
+
+func GetSharedConfigSession(region, endpoint string, forcePathStyle bool) (*session.Session, error) {
+	return session.NewSessionWithOptions(session.Options{
+		SharedConfigState: session.SharedConfigEnable,
+		Config: aws.Config{
+			CredentialsChainVerboseErrors: aws.Bool(true),
+			Endpoint:                      aws.String(endpoint),
+			Region:                        aws.String(region),
+			S3ForcePathStyle:              aws.Bool(forcePathStyle),
+		},
+	})
 }
 
 func formatNumber(format string, s uint64) string {
@@ -264,11 +261,11 @@ func acceptsHTML(hdr http.Header) bool {
 
 	for _, s := range actual {
 		if s.Value == "text/html" {
-			return (true)
+			return true
 		}
 	}
 
-	return (false)
+	return false
 }
 
 func formatSize(size int64) string {

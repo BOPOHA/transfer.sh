@@ -173,9 +173,7 @@ type S3Storage struct {
 }
 
 // NewS3Storage is the factory for S3Storage
-func NewS3Storage(accessKey, secretKey, bucketName string, purgeDays int, region, endpoint string, disableMultipart bool, forcePathStyle bool, logger *log.Logger) (*S3Storage, error) {
-	sess := getAwsSession(accessKey, secretKey, region, endpoint, forcePathStyle)
-
+func NewS3Storage(sess *session.Session, bucketName string, purgeDays int, disableMultipart bool, logger *log.Logger) (*S3Storage, error) {
 	return &S3Storage{
 		bucket:      bucketName,
 		s3:          s3.New(sess),
